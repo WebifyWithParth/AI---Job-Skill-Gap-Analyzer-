@@ -429,35 +429,40 @@ html, body,
 }
 .jcard-head {
   background: linear-gradient(135deg, #160e2e, #120d24);
-  padding: 14px 20px 14px 52px;
+  padding: 16px 20px 16px 64px;
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid rgba(155,93,229,.18);
+  gap: 12px;
 }
 .jcard-rank {
   position: absolute; top: 0; left: 0;
-  width: 40px; height: 100%;
+  width: 48px; height: 100%;
   background: linear-gradient(180deg, var(--purple3), var(--purple4));
   display: flex; align-items: center; justify-content: center;
   font-family: 'JetBrains Mono', monospace;
   font-size: .65rem; font-weight: 900; color: #fff;
   box-shadow: 2px 0 14px rgba(124,58,237,.4);
 }
-.jcard-title { font-weight: 800; font-size: .92rem; color: #fff; }
+.jcard-title {
+  font-weight: 900; font-size: 1.05rem; color: #fff;
+  letter-spacing: -.01em; line-height: 1.2;
+  flex: 1;
+}
 .jcard-score {
   font-family: 'JetBrains Mono', monospace;
   font-size: 1.1rem; font-weight: 900;
   background: linear-gradient(110deg, var(--purple2), var(--purple));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
+  background-clip: text; white-space: nowrap;
 }
-.bar-outer { height: 3px; background: rgba(155,93,229,.08); }
+.bar-outer { height: 3px; background: rgba(155,93,229,.08); margin-left: 48px; }
 .bar-inner {
   height: 100%;
   background: linear-gradient(90deg, var(--purple3), var(--purple2));
   animation: barFill 1.3s cubic-bezier(.22,1,.36,1) both;
   box-shadow: 0 0 8px var(--glow);
 }
-.jcard-body { padding: 16px 20px; }
+.jcard-body { padding: 16px 20px 16px 64px; }
 
 /* ── SKILL TAGS ── */
 .stag {
@@ -607,18 +612,40 @@ def load_data():
     try:
         df = pd.read_csv("DataAnalyst.csv")
         df.columns = df.columns.str.strip().str.lower()
-        skills_col = None
-        for c in df.columns:
-            if any(k in c for k in ['skill','desc','job','qualif','require','key']):
-                skills_col = c; break
-        if not skills_col:
-            skills_col = df.columns[0]
-        df['skills_text'] = df[skills_col].fillna('').astype(str)
+
+        # ── find TITLE column first (higher priority) ──
         title_col = None
         for c in df.columns:
-            if any(k in c for k in ['title','role','position','name','job_title']):
+            if any(k == c or c.startswith(k) for k in ['job_title','title','role','position','job name','jobtitle']):
                 title_col = c; break
-        df['job_title'] = df[title_col].fillna('Unknown').astype(str) if title_col else df.index.map(lambda i: f"Role #{i+1}")
+        if not title_col:
+            for c in df.columns:
+                if 'title' in c or 'role' in c or 'position' in c:
+                    title_col = c; break
+
+        # ── find SKILLS column (must NOT be the title column) ──
+        skills_col = None
+        for c in df.columns:
+            if c == title_col:
+                continue
+            if any(k in c for k in ['skill','desc','qualif','require','key','keyword','responsibility','summary']):
+                skills_col = c; break
+        if not skills_col:
+            # pick the longest-text column that isn't the title
+            best, best_len = None, 0
+            for c in df.columns:
+                if c == title_col:
+                    continue
+                avg_len = df[c].fillna('').astype(str).str.len().mean()
+                if avg_len > best_len:
+                    best_len = avg_len
+                    best = c
+            skills_col = best or df.columns[0]
+
+        df['skills_text'] = df[skills_col].fillna('').astype(str)
+        df['job_title']   = df[title_col].fillna('Unknown Role').astype(str) if title_col else \
+                            df.index.map(lambda i: f"Role #{i+1}")
+
         return df[['job_title','skills_text']].drop_duplicates('job_title').reset_index(drop=True)
     except Exception:
         rows = [
@@ -935,13 +962,23 @@ with right:
                 <div class="jcard" style="{card_delay}">
                   <div class="jcard-rank">#{rank}</div>
                   <div class="jcard-head">
-                    <span class="jcard-title">{r['title']}</span>
+                    <span class="jcard-title">💼 {r['title']}</span>
                     <span class="jcard-score">{r['score']}%</span>
                   </div>
                   <div class="bar-outer">
                     <div class="bar-inner" style="width:{bar}%"></div>
                   </div>
                   <div class="jcard-body">
+                    <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(155,93,229,.1);">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;
+                                   letter-spacing:.2em;text-transform:uppercase;color:#6b6b8a;">
+                        ROLE MATCH
+                      </span>
+                      <div style="font-size:1rem;font-weight:800;color:#e8e8f0;margin-top:3px;
+                                  letter-spacing:-.01em;">
+                        {r['title']}
+                      </div>
+                    </div>
                     <div style="margin-bottom:12px;">
                       <span class="field-label" style="margin-bottom:6px;">✓ Skills You Have</span>
                       {matched_tags}
